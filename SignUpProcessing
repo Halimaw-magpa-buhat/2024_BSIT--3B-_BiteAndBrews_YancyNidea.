@@ -1,0 +1,3 @@
+   // Insert inputted data in the register form to the database
+            $stmt = $conn->prepare("INSERT INTO users (fname, lname, user_email, user_password) VALUES(?,?,?,?)");
+            $stmt->bind_param('ssss', $fname, $lname, $user_email, $hashed_password);

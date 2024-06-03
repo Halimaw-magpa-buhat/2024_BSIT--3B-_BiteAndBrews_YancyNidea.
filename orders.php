@@ -1,6 +1,28 @@
 <?php
 include_once("../server/connection.php");
 
+// Handle the update request for order status
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['order_id']) && isset($_POST['status'])) {
+    $order_id = $_POST['order_id'];
+    $status = $_POST['status'];
+
+    $update_query = "UPDATE orders SET order_status = ? WHERE order_id = ?";
+    $stmt = $conn->prepare($update_query);
+    $stmt->bind_param("si", $status, $order_id);
+    $stmt->execute();
+}
+
+// Handle the update request for payment status
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['payment_order_id']) && isset($_POST['payment_status'])) {
+    $order_id = $_POST['payment_order_id'];
+    $payment_status = $_POST['payment_status'];
+
+    $update_query = "UPDATE orders SET payment_status = ? WHERE order_id = ?";
+    $stmt = $conn->prepare($update_query);
+    $stmt->bind_param("si", $payment_status, $order_id);
+    $stmt->execute();
+}
+
 // Number of orders to display per page
 $orders_per_page = 10;
 
@@ -20,7 +42,13 @@ $total_orders = $total_orders_result->fetch_assoc()['total'];
 $total_pages = ceil($total_orders / $orders_per_page);
 
 // Get the orders for the current page
-$stmt = $conn->prepare("SELECT * FROM orders LIMIT ?, ?");
+$stmt = $conn->prepare("
+    SELECT oi.*, o.order_status, o.payment_status, u.fname
+    FROM order_items oi
+    JOIN orders o ON oi.order_id = o.order_id
+    JOIN users u ON o.user_id = u.user_id
+    LIMIT ?, ?
+");
 $stmt->bind_param("ii", $offset, $orders_per_page);
 $stmt->execute();
 $orders = $stmt->get_result();
@@ -32,6 +60,7 @@ $orders = $stmt->get_result();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard</title>
     <style>
+        /* Styles for the Admin Dashboard */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -183,7 +212,7 @@ $orders = $stmt->get_result();
         <div class="logo">Admin Dashboard</div>
         <nav>
             <ul>
-            <li><span class="site-name">BiteAndBrews</span></li>
+                <li><span class="site-name">BiteAndBrews</span></li>
             </ul>
         </nav>
         <div class="logout">
@@ -193,8 +222,8 @@ $orders = $stmt->get_result();
     <div class="container">
         <aside>
             <ul>
-            <li><a href="dashboard.php">Dashboard</a></li>
-                <li><a href="dashboard.php">Manage Products</a></li>
+                <li><a href="dashboard.php">Dashboard</a></li>
+                <li><a href="manage_product.php">Manage Products</a></li>
                 <li><a href="orders.php">Orders</a></li>
                 <li><a href="recover.php">Recover Products</a></li>
             </ul>
@@ -205,47 +234,69 @@ $orders = $stmt->get_result();
                 <table>
                     <thead>
                         <tr>
-                            <th>Order ID</th>
-                            <th>Order Cost</th>
+                            <th>Product Name</th>
+                            <th>Product Image</th>
                             <th>Order Status</th>
+                            <th>Payment Status</th>
                             <th>User ID</th>
-                            <th>User Phone</th>
-                            <th>User City</th>
-                            <th>User Address</th>
+                            <th>First Name</th>
+                            <th>Product Price</th>
                             <th>Order Date</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php while ($order = $orders->fetch_assoc()): ?>
                         <tr>
-                            <td><?php echo $order['order_id']; ?></td>
-                            <td><?php echo $order['order_cost']; ?></td>
-                            <td><?php echo $order['order_status']; ?></td>
+                            <td><?php echo $order['product_name']; ?></td>
+                            <td><img src="../assets/imgs/<?php echo $order['product_img']; ?>" alt="<?php echo $order['product_name']; ?>" width="50"></td>
+                            <td>
+                                <form method="post" action="">
+                                    <input type="hidden" name="order_id" value="<?php echo $order['order_id']; ?>">
+                                    <select name="status" onchange="this.form.submit()">
+                                        <option value="Order Processed" <?php if ($order['order_status'] == 'Order Processed') echo 'selected'; ?>>Order Processed</option>
+                                        <option value="Order Shipped" <?php if ($order['order_status'] == 'Order Shipped') echo 'selected'; ?>>Order Shipped</option>
+                                        <option value="Order En Route" <?php if ($order['order_status'] == 'Order En Route') echo 'selected'; ?>>Order En Route</option>
+                                        <option value="Order Arrived" <?php if ($order['order_status'] == 'Order Arrived') echo 'selected'; ?>>Order Arrived</option>
+                                    </select>
+                                </form>
+                            </td>
+                            <td>
+                                <form method="post" action="">
+                                    <input type="hidden" name="payment_order_id" value="<?php echo $order['order_id']; ?>">
+                                    <select name="payment_status" onchange="this.form.submit()">
+                                        <option value="not paid" <?php if ($order['payment_status'] == 'not paid') echo 'selected'; ?>>Not Paid</option>
+                                        <option value="Paid" <?php if ($order['payment_status'] == 'Paid') echo 'selected'; ?>>Paid</option>
+                                    </select>
+                                </form>
+                            </td>
                             <td><?php echo $order['user_id']; ?></td>
-                            <td><?php echo $order['user_phone']; ?></td>
-                            <td><?php echo $order['user_city']; ?></td>
-                            <td><?php echo $order['user_address']; ?></td>
+                            <td><?php echo $order['fname']; ?></td>
+                            <td><?php echo $order['product_price']; ?></td>
                             <td><?php echo $order['order_date']; ?></td>
                         </tr>
                         <?php endwhile; ?>
                     </tbody>
                 </table>
 
-                <nav aria-label="Page navigation example">
-                    <ul class="pagination">
-                        <li class="page-item <?php if($page <= 1) echo 'disabled'; ?>">
-                            <a class="page-link" href="<?php if($page > 1) { echo "?page=" . ($page - 1); } else { echo '#'; } ?>">Previous</a>
-                        </li>
+                <div class="pagination">
+                    <ul>
+                        <?php if ($page > 1): ?>
+                        <li><a href="?page=<?php echo $page - 1; ?>">&laquo; Prev</a></li>
+                        <?php else: ?>
+                        <li class="disabled"><a href="#">&laquo; Prev</a></li>
+                        <?php endif; ?>
+
                         <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                        <li class="page-item <?php if($page == $i) echo 'active'; ?>">
-                            <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
-                        </li>
+                        <li class="<?php if ($i == $page) echo 'active'; ?>"><a href="?page=<?php echo $i; ?>"><?php echo $i; ?></a></li>
                         <?php endfor; ?>
-                        <li class="page-item <?php if($page >= $total_pages) echo 'disabled'; ?>">
-                            <a class="page-link" href="<?php if($page < $total_pages) { echo "?page=" . ($page + 1); } else { echo '#'; } ?>">Next</a>
-                        </li>
+
+                        <?php if ($page < $total_pages): ?>
+                        <li><a href="?page=<?php echo $page + 1; ?>">Next &raquo;</a></li>
+                        <?php else: ?>
+                        <li class="disabled"><a href="#">Next &raquo;</a></li>
+                        <?php endif; ?>
                     </ul>
-                </nav>
+                </div>
             </div>
         </main>
     </div>
